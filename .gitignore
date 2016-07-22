@@ -45,3 +45,6 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+Data/sample_submission.csv.zip
+Data/test.json.zip
+Data/train.json.zip
