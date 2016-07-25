@@ -3,9 +3,10 @@ pr = pprint.PrettyPrinter(indent=4)
 import json
 from sklearn.feature_extraction.text import CountVectorizer
 import pandas as pd
-import seaborn as sns
 
 train_data_file_name = 'Data/train.json'
+test_data_file_name = 'Data/test.json'
+submission_file_name = 'Submission.csv'
 
 ### look at the first lines in the file ###
 def check_json_file(fn):
@@ -27,7 +28,8 @@ def read_json_records(fn, count=None):
         while x < line_count:
             x += 1
             l = f.readline()
-            if l.strip() != '},': s += l
+            if l.strip() != '},' and l.strip() != '}': 
+                s += l
             else:
                 s += "}"
                 result.append(json.loads(s))
@@ -39,13 +41,14 @@ def read_json_records(fn, count=None):
 
 ### convert the json records to a list of record ids, lables and features ###
 ### as one string                                                         ###
-def get_data(json_records):
+def get_data(json_records, do_labels):
     ids = []
     labels = []
     features = []
     for json_rec in json_records:
         ids.append(json_rec['id'])
-        labels.append(json_rec['cuisine'])
+        if do_labels:
+            labels.append(json_rec['cuisine'])
         ingr_list = json_rec['ingredients']
         ingr = ''
         for i in ingr_list:
@@ -67,32 +70,59 @@ def vectorize_ingredients(ingrs):
 def explore_labels(y):
     freq = pd.Series(y).value_counts()[:10]
     freq = freq.apply(lambda x: x / float(len(y)))
-    freq_df = freq.to_frame().iloc[::-1]
-    freq_df.plot.barh()
+    #freq_df = freq.to_frame().iloc[::-1]
+    #freq_df.plot.barh()
     print freq
 
+### create, grid search, cross-validate and calculate accuracy score
+def train_classifier(clf, params, X, y):
+    from sklearn.grid_search import GridSearchCV
+    from sklearn.metrics import make_scorer
+    from sklearn.metrics import accuracy_score
+    grid_obj = GridSearchCV(clf, params, scoring=make_scorer(accuracy_score))
+    grid_obj = grid_obj.fit(X, y)
+    
+    print 
+    print "Training {} classifier - accuracy scores are:".format(clf.__class__.__name__)    
+    pr.pprint(grid_obj.grid_scores_)
+    
+    #return grid_obj.best_estimator_
+    
+
 ### Pre-processing ###
-json_recs = read_json_records(train_data_file_name, count=200)
-ids_train, ingr_train, y_train = get_data(json_recs)
-ingr_names, X_train = vectorize_ingredients(ingr_train)
+json_recs = read_json_records(train_data_file_name, count=1000000)
+ids_train, ingr_train, y_train = get_data(json_recs, True)
+
+json_recs = read_json_records(test_data_file_name, count=1000000)
+ids_test, ingr_test, y_test = get_data(json_recs, False)
+
+vectorizer = CountVectorizer()
+ingr_all = ingr_train + ingr_test
+vectorizer.fit(ingr_all)
+X_train = vectorizer.transform(ingr_train)
+X_test= vectorizer.transform(ingr_test)
 
 ### Data Exploration ###
 explore_labels(y_train)
 
+### Classification exploration ###
+#from sklearn.naive_bayes import MultinomialNB
+#train_classifier(MultinomialNB(), {'fit_prior': [False]}, X_train, y_train)
 
+from sklearn.svm import SVC
+#train_classifier(SVC(), {'C': [0.2], 'kernel': ['linear']}, X_train, y_train)
 
+### training chosen algorithm ###
+clf = SVC(C=0.2, kernel='linear')
+clf.fit(X_train, y_train, verbose=True)
 
+### making predictions ###
+pred = clf.predict(X_test)
+explore_labels(pred)
 
-
-
-
-
-
-
-
-
-
-
+submission = pd.DataFrame({'id': ids_test, 'cuisine': pred})
+submission.to_csv(path_or_buf=submission_file_name, columns=['id', 'cuisine'], 
+                  index=False)
 
 
 
