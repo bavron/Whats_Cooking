@@ -3,6 +3,7 @@ pr = pprint.PrettyPrinter(indent=4)
 import json
 from sklearn.feature_extraction.text import CountVectorizer
 import pandas as pd
+from time import time
 
 train_data_file_name = 'Data/train.json'
 test_data_file_name = 'Data/test.json'
@@ -80,7 +81,9 @@ def train_classifier(clf, params, X, y):
     from sklearn.metrics import make_scorer
     from sklearn.metrics import accuracy_score
     grid_obj = GridSearchCV(clf, params, scoring=make_scorer(accuracy_score))
+    start_time = time()
     grid_obj = grid_obj.fit(X, y)
+    print "Grid Search completed in {} seconds".format(time()-start_time)
     
     print 
     print "Training {} classifier - accuracy scores are:".format(clf.__class__.__name__)    
@@ -99,8 +102,16 @@ ids_test, ingr_test, y_test = get_data(json_recs, False)
 vectorizer = CountVectorizer()
 ingr_all = ingr_train + ingr_test
 vectorizer.fit(ingr_all)
+X_all = vectorizer.transform(ingr_all)
 X_train = vectorizer.transform(ingr_train)
 X_test= vectorizer.transform(ingr_test)
+
+# transform to tf-idf weighted matrix
+from sklearn.feature_extraction.text import TfidfTransformer
+transformer = TfidfTransformer()
+transformer.fit(X_all)
+X_train = transformer.transform(X_train)
+X_test = transformer.transform(X_test)
 
 ### Data Exploration ###
 explore_labels(y_train)
@@ -109,23 +120,27 @@ explore_labels(y_train)
 #from sklearn.naive_bayes import MultinomialNB
 #train_classifier(MultinomialNB(), {'fit_prior': [False]}, X_train, y_train)
 
-from sklearn.svm import SVC
-#train_classifier(SVC(), {'C': [0.2], 'kernel': ['linear']}, X_train, y_train)
+#from sklearn.svm import SVC
+#train_classifier(SVC(), {'C': [0.2], 'kernel': ['linear'], 'verbose': [2]}, 
+#                 X_train, y_train)
+from sklearn.svm import LinearSVC
+#train_classifier(LinearSVC(), {'C': [0.48], 'verbose': [2]}, X_train, y_train)
 
 ### training chosen algorithm ###
-clf = SVC(C=0.2, kernel='linear')
-clf.fit(X_train, y_train, verbose=True)
+def train_predict(clf, X_train, y_train, X_test):
+    
+    clf.fit(X_train, y_train)
 
-### making predictions ###
-pred = clf.predict(X_test)
-explore_labels(pred)
+    ### making predictions ###
+    pred = clf.predict(X_test)
+    explore_labels(pred)
 
-submission = pd.DataFrame({'id': ids_test, 'cuisine': pred})
-submission.to_csv(path_or_buf=submission_file_name, columns=['id', 'cuisine'], 
-                  index=False)
+    submission = pd.DataFrame({'id': ids_test, 'cuisine': pred})
+    submission.to_csv(path_or_buf=submission_file_name, columns=['id', 'cuisine'], 
+                      index=False)
 
-
-
+clf = LinearSVC(C=0.48)
+train_predict(clf, X_train, y_train, X_test)
 
 
 
